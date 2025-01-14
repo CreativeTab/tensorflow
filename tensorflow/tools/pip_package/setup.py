@@ -47,7 +47,7 @@ from setuptools.dist import Distribution
 # For pip, we will remove all '-' characters from this string, and use the
 # result for pip.
 # Also update tensorflow/tensorflow.bzl and
-# tensorflow/core/public/version.h
+# tensorflow/core/public/release_version.h
 _VERSION = '2.19.0'
 
 
