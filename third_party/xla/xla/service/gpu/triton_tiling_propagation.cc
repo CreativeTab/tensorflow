@@ -925,11 +925,13 @@ DimOrderMapOrError GetPropagatedDimOrders(const HloInstruction& hlo,
 }
 
 // Difference of input and output data volumes of an instruction.
-int64_t InputMinusOutputBytes(const HloInstruction& hlo) {
+std::optional<int64_t> InputMinusOutputBytes(const HloInstruction& hlo) {
   CHECK(!hlo.shape().IsTuple());
   int64_t input_size = 0;
   for (const HloInstruction* operand : hlo.operands()) {
-    CHECK(!operand->shape().IsTuple());
+    if (operand->shape().IsTuple()) {
+      return std::nullopt;
+    }
     input_size += ShapeUtil::ByteSizeOf(operand->shape());
   }
   return input_size - ShapeUtil::ByteSizeOf(hlo.shape());
@@ -947,7 +949,11 @@ constexpr int kIoToleranceBytes = 1024;
 
 // Tells that fusing an instruction as an input is efficient.
 bool IsInputWorthFusing(const HloInstruction& hlo) {
-  if (InputMinusOutputBytes(hlo) <= kIoToleranceBytes) {
+  std::optional<int64_t> input_minus_output_bytes = InputMinusOutputBytes(hlo);
+  if (!input_minus_output_bytes.has_value()) {
+    return false;
+  }
+  if (input_minus_output_bytes.value() <= kIoToleranceBytes) {
     return true;
   }
   if (hlo.user_count() > 1) {
@@ -957,13 +963,22 @@ bool IsInputWorthFusing(const HloInstruction& hlo) {
       hlo_query::AllOperandsAreParametersOrConstants(hlo)) {
     return true;
   }
+  if (hlo.opcode() == HloOpcode::kMultiply) {
+    return IsInputWorthFusing(*hlo.operand(0)) &&
+           IsInputWorthFusing(*hlo.operand(1));
+  }
   return hlo_query::AllOperandsAreParametersOrConstantsWithSingleUser(hlo);
 }
 
 // Tells that fusing an instruction as an output is efficient.
 bool IsOutputWorthFusing(const HloInstruction& hlo) {
+  std::optional<int64_t> input_minus_output_bytes = InputMinusOutputBytes(hlo);
+  if (!input_minus_output_bytes.has_value()) {
+    return false;
+  }
+
   return CanNotBeFusedIntoAUser(hlo) ||
-         InputMinusOutputBytes(hlo) >= -kIoToleranceBytes;
+         input_minus_output_bytes.value() >= -kIoToleranceBytes;
 }
 
 FusionDecision IsConversionWorthFusing(const HloInstruction& input,
