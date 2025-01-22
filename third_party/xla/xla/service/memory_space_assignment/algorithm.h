@@ -486,11 +486,6 @@ class MsaAlgorithm : public GlobalDecreasingSizeBestFitHeap<HloValue> {
     // Data structures used to compute and store the unsliced solution.
     WorkingIntervals unsliced_solution_intervals;
     std::optional<UnslicedSolution> unsliced_solution;
-
-    // Indicates whether the prefetch is for a windowed prefetch. A window
-    // prefetch only prefetches a window worth of data. Its prefetch does not
-    // use sliced prefetch.
-    bool window_prefetch = false;
   };
 
   // Return true if the result belongs to a failure.
@@ -883,15 +878,6 @@ class MsaAlgorithm : public GlobalDecreasingSizeBestFitHeap<HloValue> {
       const std::vector<SliceDecision>& slice_decisions_sorted_by_start_time,
       int64_t prefetch_end_time, int64_t allocation_end_time,
       HloInstruction* sync_mem_op);
-
-  // For window prefetching, adds a WindowPrefetchedAllocation to allocations.
-  // Also updates asynchronous copy data structures, prefetch_interval_tree_,
-  // and aliasing data structures.
-  void AddAsyncCopyForWindowPrefetch(
-      Allocation& prev_allocation, HloUse use, const Chunk& chunk,
-      int64_t exclusive_start_time, int64_t inclusive_end_time,
-      AllocationSequence* allocations, AliasedOffset* aliased_offset,
-      float resource, const WindowPrefetchedAllocation::Options& options);
 
   // This method is used for committing the chunk candidate but adding it to
   // pending_chunks_ so that we can "uncommit" them in case we need to roll back

@@ -261,9 +261,6 @@ struct AllocationRequest {
   // No new Allocation is needed to be created and we will only extend an
   // existing one.
   bool only_extend_existing_allocation;
-  // Data structure that contains the options for making window prefetched
-  // allocations.
-  const WindowPrefetchedAllocation::Options* window_prefetch_options = nullptr;
 };
 
 // Result of an allocation, prefetch, eviction etc. request.  The result is

@@ -4782,20 +4782,6 @@ AllocationResult MsaAlgorithm::AllocateSegment(AllocationRequest& request) {
   return allocation_result;
 }
 
-void MsaAlgorithm::AddAsyncCopyForWindowPrefetch(
-    Allocation& prev_allocation, HloUse use, const Chunk& chunk,
-    int64_t exclusive_start_time, int64_t inclusive_end_time,
-    AllocationSequence* allocations, AliasedOffset* aliased_offset,
-    float resource, const WindowPrefetchedAllocation::Options& options) {
-  allocations->push_back(std::make_unique<WindowPrefetchedAllocation>(
-      prev_allocation, use, chunk, exclusive_start_time, inclusive_end_time,
-      options));
-
-  RegisterAsyncCopy(MemorySpace::kAlternate, exclusive_start_time,
-                    inclusive_end_time, allocations, aliased_offset, resource,
-                    /*cross_program_prefetch_index=*/std::nullopt);
-}
-
 void MsaAlgorithm::AddAsyncCopyOrOtherMemOp(
     Allocation& prev_allocation, MemorySpace memory_space,
     std::optional<Chunk> chunk, int64_t exclusive_start_time, int64_t end_time,
@@ -5261,16 +5247,40 @@ AllocationResult MsaAlgorithm::WindowPrefetch(
       continue;
     }
 
-    WindowPrefetchedAllocation::Options options;
-    options.bytes = window.size();
-    options.uid = window.uid();
-    options.alternate_memory_space = options_.alternate_memory_space;
-    options.notify_operand_appended_fn = options_.notify_operand_appended_fn;
+    int64_t end_time = request.end_time;
+    int64_t start_time = request.end_time - 1;
     AllocationRequest window_prefetch_request = request;
-    window_prefetch_request.window_prefetch_options = &options;
     window_prefetch_request.size = window.size();
-    const Shape shape = ShapeUtil::MakeShape(U8, {window.size()});
-    Prefetch(window_prefetch_request, prev_allocation_in_default_mem, &shape);
+    window_prefetch_request.end_time = end_time;
+    std::vector<int64_t> all_use_times = {end_time};
+    window_prefetch_request.all_use_times = all_use_times;
+
+    MsaBufferInterval alternate_mem_interval;
+    alternate_mem_interval.buffer = request.allocation_value_to_update->value();
+    alternate_mem_interval.size = window.size();
+    alternate_mem_interval.end = end_time;
+    alternate_mem_interval.start = start_time;
+    std::optional<Chunk> candidate_chunk = FindBestChunkCandidate(
+        window_prefetch_request, /*preferred_offset=*/nullptr,
+        &alternate_mem_interval);
+    if (candidate_chunk.has_value()) {
+      AddToPendingChunks(alternate_mem_interval, *candidate_chunk);
+
+      AllocationSequence* allocation_sequence =
+          request.allocation_value_to_update->mutable_allocation_sequence();
+      WindowPrefetchedAllocation::Options options;
+      options.bytes = window.size();
+      options.uid = window.uid();
+      options.alternate_memory_space = options_.alternate_memory_space;
+      options.notify_operand_appended_fn = options_.notify_operand_appended_fn;
+      allocation_sequence->push_back(
+          std::make_unique<WindowPrefetchedAllocation>(
+              prev_allocation_in_default_mem, use, *candidate_chunk,
+              start_time - 1, end_time, options));
+      CreateOrAddToAliasedOffset(*allocation_sequence->back(),
+                                 /*aliased_offset=*/nullptr);
+      allocation_sequence->back()->AddUse(use);
+    }
   }
   return AllocationResult::kSuccess;
 }
@@ -5300,10 +5310,6 @@ AllocationResult MsaAlgorithm::Prefetch(
   PrefetchContext context;
   context.request = &request;
   context.prev_allocation_in_default_mem = &prev_allocation_in_default_mem;
-  // If the request has window prefetch options, it is called from window
-  // prefetch.
-  context.window_prefetch = (request.window_prefetch_options != nullptr);
-  CHECK(!context.window_prefetch || options_.enable_window_prefetch);
 
   // Create a SliceProposal and WorkingIntervals.
   SetupPrefetchWorkingIntervalsAndSliceProposal(context);
@@ -5426,32 +5432,19 @@ AllocationResult MsaAlgorithm::Prefetch(
             << context.unsliced_solution->prefetch_picker_debug_string;
     AddToPendingChunks(context.unsliced_solution_intervals.full,
                        context.unsliced_solution->chunk_candidate);
-    if (context.window_prefetch) {
-      AddAsyncCopyForWindowPrefetch(
-          *context.prev_allocation_in_default_mem, request.use->hlo_use,
-          context.unsliced_solution->chunk_candidate,
-          context.unsliced_solution_intervals.full.start - 1,
-          context.prefetch_end_time,
-          context.request->allocation_value_to_update
-              ->mutable_allocation_sequence(),
-          context.request->preferred_offset,
-          context.unsliced_solution->prefetch_resource,
-          *context.request->window_prefetch_options);
-    } else {
-      AddAsyncCopyOrOtherMemOp(
-          *context.prev_allocation_in_default_mem, MemorySpace::kAlternate,
-          context.unsliced_solution->chunk_candidate,
-          context.unsliced_solution_intervals.full.start - 1,
-          context.request->end_time, context.prefetch_end_time,
-          context.request->allocation_value_to_update
-              ->mutable_allocation_sequence(),
-          context.request->preferred_offset,
-          context.unsliced_solution->prefetch_resource,
-          /*cross_program_prefetch_index=*/std::nullopt,
-          context.request->required_copy_allocation_for);
-      context.prev_allocation_in_default_mem->Extend(
-          context.request->latest_prefetch_time);
-    }
+    AddAsyncCopyOrOtherMemOp(
+        *context.prev_allocation_in_default_mem, MemorySpace::kAlternate,
+        context.unsliced_solution->chunk_candidate,
+        context.unsliced_solution_intervals.full.start - 1,
+        context.request->end_time, context.prefetch_end_time,
+        context.request->allocation_value_to_update
+            ->mutable_allocation_sequence(),
+        context.request->preferred_offset,
+        context.unsliced_solution->prefetch_resource,
+        /*cross_program_prefetch_index=*/std::nullopt,
+        context.request->required_copy_allocation_for);
+    context.prev_allocation_in_default_mem->Extend(
+        context.request->latest_prefetch_time);
 
     request.allocation_value_to_update->allocation_sequence()->back()->AddUse(
         request.use->hlo_use);
@@ -5532,9 +5525,7 @@ void MsaAlgorithm::SetupPrefetchWorkingIntervalsAndSliceProposal(
       context.sliced_solution_intervals.full;
 
   // Attempt to generate a slice proposal.
-  if (!context.window_prefetch) {
-    GenerateSliceProposal(context);
-  }
+  GenerateSliceProposal(context);
 
   // Setup the full SlicedBufferIntervals for the sliced and unsliced solutions.
   // If there is no slice proposal, we will not try a sliced solution. In such a
