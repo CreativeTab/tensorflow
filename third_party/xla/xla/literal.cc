@@ -16,6 +16,7 @@ limitations under the License.
 #include "xla/literal.h"
 
 #include <algorithm>
+#include <climits>
 #include <complex>
 #include <cstdint>
 #include <cstring>
@@ -33,6 +34,7 @@ limitations under the License.
 #include "absl/base/casts.h"
 #include "absl/container/inlined_vector.h"
 #include "absl/functional/function_ref.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
@@ -329,6 +331,14 @@ Literal& Literal::operator=(Literal&& other) {
 
 Literal LiteralBase::CreateFromShape(const Shape& shape) {
   Literal literal(shape);
+  int64_t total_size = 0;
+  literal.root_piece_.ForEachMutableSubpiece(
+      [&](const ShapeIndex& index, Piece* piece) {
+        if (piece->subshape().IsArray()) {
+          total_size += piece->size_bytes_dense();
+        }
+      });
+  CHECK_LE(total_size, INT_MAX) << "Literal size is too large " << total_size;
   literal.root_piece_.ForEachMutableSubpiece(
       [&](const ShapeIndex& index, Piece* piece) {
         if (piece->subshape().IsArray()) {
