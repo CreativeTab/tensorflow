@@ -1442,6 +1442,208 @@ CHECK:     tt.store
       RunAndCompareNoHloPasses(kHloText, ErrorSpec{/*aabs=*/0, /*arel=*/0}));
 }
 
+// Example from b/383162692.
+TEST_F(TritonEmitterTest, FusionWithExtraOutputsExecutesCorrectly) {
+  // The point here is to check the output of the Triton fusion for correctness.
+  constexpr absl::string_view kTritonHloText = R"(
+HloModule FusionWithExtraOutput
+
+add {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT a = f32[] add(p0, p1)
+}
+
+fusion.1 {
+  param_2.18138 = bf16[4096]{0} parameter(2)
+  convert.30745.21 = f32[4096]{0} convert(param_2.18138)
+  constant_14705_44 = f32[] constant(1)
+  broadcast.70385.1824 = f32[4096]{0} broadcast(constant_14705_44), dimensions={}
+  compare.11650.5 = pred[4096]{0} compare(convert.30745.21, broadcast.70385.1824), direction=LT
+  negate.2988.9 = f32[4096]{0} negate(convert.30745.21)
+  exponential.4390.7 = f32[4096]{0} exponential(negate.2988.9)
+  add.14340.7 = f32[4096]{0} add(exponential.4390.7, broadcast.70385.1824)
+  divide.3562.7 = f32[4096]{0} divide(broadcast.70385.1824, add.14340.7)
+  multiply.29134.7 = f32[4096]{0} multiply(divide.3562.7, divide.3562.7)
+  subtract.5407.7 = f32[4096]{0} subtract(broadcast.70385.1824, multiply.29134.7)
+  sqrt.1836.5 = f32[4096]{0} sqrt(subtract.5407.7)
+  constant_14706_120 = f32[] constant(2)
+  broadcast.70386.522 = f32[4096]{0} broadcast(constant_14706_120), dimensions={}
+  multiply.29135.5 = f32[4096]{0} multiply(exponential.4390.7, broadcast.70386.522)
+  constant_14707_120 = f32[] constant(-2)
+  broadcast.70387.522 = f32[4096]{0} broadcast(constant_14707_120), dimensions={}
+  multiply.29137.7 = f32[4096]{0} multiply(convert.30745.21, broadcast.70387.522)
+  exponential.4391.5 = f32[4096]{0} exponential(multiply.29137.7)
+  add.14341.5 = f32[4096]{0} add(multiply.29135.5, exponential.4391.5)
+  sqrt.1837.5 = f32[4096]{0} sqrt(add.14341.5)
+  multiply.29138.5 = f32[4096]{0} multiply(divide.3562.7, sqrt.1837.5)
+  select.8704.5 = f32[4096]{0} select(compare.11650.5, sqrt.1836.5, multiply.29138.5)
+  convert.30746.3 = bf16[4096]{0} convert(select.8704.5)
+  broadcast.70506.3 = bf16[1,8,4096]{2,1,0} broadcast(convert.30746.3), dimensions={2}
+  param_0.12242 = bf16[1,8,4096]{2,1,0} parameter(0)
+  multiply.29309.3 = bf16[1,8,4096]{2,1,0} multiply(broadcast.70506.3, param_0.12242)
+  convert.30909.1 = bf16[4096]{0} convert(divide.3562.7)
+  broadcast.70675.1 = bf16[8,4096]{1,0} broadcast(convert.30909.1), dimensions={1}
+  param_1.27471 = bf16[8,4096]{1,0} parameter(1)
+  multiply.32436 = bf16[8,4096]{1,0} multiply(param_1.27471, param_1.27471)
+  convert.34786 = f32[8,4096]{1,0} convert(multiply.32436)
+  constant_34984 = f32[] constant(0)
+  reduce.6749 = f32[8]{0} reduce(convert.34786, constant_34984), dimensions={1}, to_apply=add
+  constant_34983 = f32[] constant(0.000244140625)
+  broadcast.73257 = f32[8]{0} broadcast(constant_34983), dimensions={}
+  multiply.32435 = f32[8]{0} multiply(reduce.6749, broadcast.73257)
+  convert.34785 = bf16[8]{0} convert(multiply.32435)
+  constant_34982 = bf16[] constant(9.984e-07)
+  broadcast.73256 = bf16[8]{0} broadcast(constant_34982), dimensions={}
+  add.15681 = bf16[8]{0} add(convert.34785, broadcast.73256)
+  convert.34784 = f32[8]{0} convert(add.15681)
+  rsqrt.5166 = f32[8]{0} rsqrt(convert.34784)
+  convert.34783 = bf16[8]{0} convert(rsqrt.5166)
+  broadcast.73255 = bf16[8,4096]{1,0} broadcast(convert.34783), dimensions={0}
+  multiply.32434 = bf16[8,4096]{1,0} multiply(param_1.27471, broadcast.73255)
+  multiply.29318.3 = bf16[8,4096]{1,0} multiply(broadcast.70675.1, multiply.32434)
+  bitcast.135978.1 = bf16[1,8,4096]{2,1,0} bitcast(multiply.29318.3)
+  add.14443.1 = bf16[1,8,4096]{2,1,0} add(multiply.29309.3, bitcast.135978.1)
+  multiply.28509 = bf16[1,8,4096]{2,1,0} multiply(add.14443.1, add.14443.1)
+  convert.30357 = f32[1,8,4096]{2,1,0} convert(multiply.28509)
+  bitcast.124401 = f32[8,4096]{1,0} bitcast(convert.30357)
+  constant_30271 = f32[] constant(0)
+  reduce.5833 = f32[8]{0} reduce(bitcast.124401, constant_30271), dimensions={1}, to_apply=add
+  bitcast.124402 = f32[8,1]{1,0} bitcast(reduce.5833)
+  constant_30272 = f32[] constant(0.000244140625)
+  broadcast.70206 = f32[8,1]{1,0} broadcast(constant_30272), dimensions={}
+  multiply.28510 = f32[8,1]{1,0} multiply(bitcast.124402, broadcast.70206)
+  convert.30358 = bf16[8,1]{1,0} convert(multiply.28510)
+  constant_30273 = bf16[] constant(9.984e-07)
+  broadcast.70207 = bf16[8,1]{1,0} broadcast(constant_30273), dimensions={}
+  add.13229 = bf16[8,1]{1,0} add(convert.30358, broadcast.70207)
+  convert.30359 = f32[8,1]{1,0} convert(add.13229)
+  rsqrt.4624 = f32[8,1]{1,0} rsqrt(convert.30359)
+  convert.30360 = bf16[8,1]{1,0} convert(rsqrt.4624)
+  bitcast.124403 = bf16[8]{0} bitcast(convert.30360)
+  broadcast.70208 = bf16[1,8,4096]{2,1,0} broadcast(bitcast.124403), dimensions={1}
+  multiply.28511 = bf16[1,8,4096]{2,1,0} multiply(add.14443.1, broadcast.70208)
+  ROOT res = (bf16[1,8,4096]{2,1,0}, bf16[1,8,4096]{2,1,0}) tuple(add.14443.1, multiply.28511)
+}
+
+ENTRY main {
+  param_0 = bf16[1,8,4096]{2,1,0} parameter(0)
+  param_1 = bf16[8,4096]{1,0} parameter(1)
+  param_2 = bf16[4096]{0} parameter(2)
+  ROOT res = (bf16[1,8,4096]{2,1,0}, bf16[1,8,4096]{2,1,0}) fusion(param_0, param_1, param_2), kind=kCustom, calls=fusion.1, backend_config={"operation_queue_id":"0","wait_on_operation_queues":[],"fusion_backend_config":{"kind":"__triton","block_level_fusion_config":{"output_tile_sizes":["1","1","4096"],"num_warps":"32"}},"force_earliest_schedule":false}
+})";
+
+  constexpr absl::string_view kEmittersHloText = R"(
+add {
+  p1 = f32[] parameter(1)
+  p0 = f32[] parameter(0)
+  ROOT add.13 = f32[] add(p0, p1)
+}
+
+fused_reduce {
+  param_0.90 = bf16[1,8,4096]{2,1,0} parameter(0)
+  multiply.34.1 = bf16[1,8,4096]{2,1,0} multiply(param_0.90, param_0.90)
+  convert.32.1 = f32[1,8,4096]{2,1,0} convert(multiply.34.1)
+  bitcast.299.1 = f32[8,4096]{1,0} bitcast(convert.32.1)
+  constant_34984_2 = f32[] constant(0)
+  ROOT reduce.5833.1 = f32[8]{0} reduce(bitcast.299.1, constant_34984_2), dimensions={1}, to_apply=add
+}
+
+fused_add {
+  param_2.35 = bf16[4096]{0} parameter(2)
+  convert.25.11 = f32[4096]{0} convert(param_2.35)
+  constant_14705_44_2 = f32[] constant(1)
+  broadcast.33.11 = f32[4096]{0} broadcast(constant_14705_44_2), dimensions={}
+  compare.2.5 = pred[4096]{0} compare(convert.25.11, broadcast.33.11), direction=LT
+  negate.2.11 = f32[4096]{0} negate(convert.25.11)
+  exponential.4.9 = f32[4096]{0} exponential(negate.2.11)
+  add.14.3 = f32[4096]{0} add(exponential.4.9, broadcast.33.11)
+  divide.2.3 = f32[4096]{0} divide(broadcast.33.11, add.14.3)
+  multiply.25.7 = f32[4096]{0} multiply(divide.2.3, divide.2.3)
+  subtract.2.7 = f32[4096]{0} subtract(broadcast.33.11, multiply.25.7)
+  sqrt.4.5 = f32[4096]{0} sqrt(subtract.2.7)
+  constant_14706_120_2 = f32[] constant(2)
+  broadcast.37.3 = f32[4096]{0} broadcast(constant_14706_120_2), dimensions={}
+  multiply.26.3 = f32[4096]{0} multiply(exponential.4.9, broadcast.37.3)
+  constant_14707_120_2 = f32[] constant(-2)
+  broadcast.38.3 = f32[4096]{0} broadcast(constant_14707_120_2), dimensions={}
+  multiply.27.5 = f32[4096]{0} multiply(convert.25.11, broadcast.38.3)
+  exponential.5.3 = f32[4096]{0} exponential(multiply.27.5)
+  add.15.3 = f32[4096]{0} add(multiply.26.3, exponential.5.3)
+  sqrt.5.5 = f32[4096]{0} sqrt(add.15.3)
+  multiply.28.5 = f32[4096]{0} multiply(divide.2.3, sqrt.5.5)
+  select.2.5 = f32[4096]{0} select(compare.2.5, sqrt.4.5, multiply.28.5)
+  convert.26.3 = bf16[4096]{0} convert(select.2.5)
+  broadcast.39.3 = bf16[1,8,4096]{2,1,0} broadcast(convert.26.3), dimensions={2}
+  param_0.14 = bf16[1,8,4096]{2,1,0} parameter(0)
+  multiply.29.3 = bf16[1,8,4096]{2,1,0} multiply(broadcast.39.3, param_0.14)
+  convert.27.1 = bf16[4096]{0} convert(divide.2.3)
+  broadcast.40.3 = bf16[8,4096]{1,0} broadcast(convert.27.1), dimensions={1}
+  param_1.53 = bf16[8,4096]{1,0} parameter(1)
+  param_3.29 = f32[8]{0} parameter(3)
+  constant_34983_3 = f32[] constant(0.000244140625)
+  broadcast.41.12 = f32[8]{0} broadcast(constant_34983_3), dimensions={}
+  multiply.31.7 = f32[8]{0} multiply(param_3.29, broadcast.41.12)
+  convert.29.5 = bf16[8]{0} convert(multiply.31.7)
+  constant_34982_3 = bf16[] constant(9.984e-07)
+  broadcast.42.18 = bf16[8]{0} broadcast(constant_34982_3), dimensions={}
+  add.16.9 = bf16[8]{0} add(convert.29.5, broadcast.42.18)
+  convert.30.7 = f32[8]{0} convert(add.16.9)
+  rsqrt.5.5 = f32[8]{0} rsqrt(convert.30.7)
+  convert.31.3 = bf16[8]{0} convert(rsqrt.5.5)
+  broadcast.43.3 = bf16[8,4096]{1,0} broadcast(convert.31.3), dimensions={0}
+  multiply.32.3 = bf16[8,4096]{1,0} multiply(param_1.53, broadcast.43.3)
+  multiply.33.3 = bf16[8,4096]{1,0} multiply(broadcast.40.3, multiply.32.3)
+  bitcast.289.1 = bf16[1,8,4096]{2,1,0} bitcast(multiply.33.3)
+  ROOT add.17.1 = bf16[1,8,4096]{2,1,0} add(multiply.29.3, bitcast.289.1)
+}
+
+fused_reduce.1 {
+  param_0.91 = bf16[8,4096]{1,0} parameter(0)
+  multiply.30.1 = bf16[8,4096]{1,0} multiply(param_0.91, param_0.91)
+  convert.28.1 = f32[8,4096]{1,0} convert(multiply.30.1)
+  constant_34984_3 = f32[] constant(0)
+  ROOT reduce.6749.1 = f32[8]{0} reduce(convert.28.1, constant_34984_3), dimensions={1}, to_apply=add
+}
+
+fused_multiply {
+  param_0.5 = bf16[1,8,4096]{2,1,0} parameter(0)
+  param_1.103 = f32[8]{0} parameter(1)
+  constant_34983_2 = f32[] constant(0.000244140625)
+  broadcast.41.10 = f32[8]{0} broadcast(constant_34983_2), dimensions={}
+  multiply.35.5 = f32[8]{0} multiply(param_1.103, broadcast.41.10)
+  convert.33.3 = bf16[8]{0} convert(multiply.35.5)
+  constant_34982_2 = bf16[] constant(9.984e-07)
+  broadcast.42.10 = bf16[8]{0} broadcast(constant_34982_2), dimensions={}
+  add.18.9 = bf16[8]{0} add(convert.33.3, broadcast.42.10)
+  convert.34.7 = f32[8]{0} convert(add.18.9)
+  rsqrt.6.5 = f32[8]{0} rsqrt(convert.34.7)
+  convert.35.3 = bf16[8]{0} convert(rsqrt.6.5)
+  broadcast.46.1 = bf16[1,8,4096]{2,1,0} broadcast(convert.35.3), dimensions={1}
+  ROOT multiply.36.1 = bf16[1,8,4096]{2,1,0} multiply(param_0.5, broadcast.46.1)
+}
+
+ENTRY main {
+  param_1.27471.0 = bf16[8,4096]{1,0} parameter(1)
+  param_0.12242.0 = bf16[1,8,4096]{2,1,0} parameter(0)
+  param_2.18138.0 = bf16[4096]{0} parameter(2)
+  input_reduce_fusion.1 = f32[8]{0} fusion(param_1.27471.0), kind=kInput, calls=fused_reduce.1
+  loop_add_fusion = bf16[1,8,4096]{2,1,0} fusion(param_0.12242.0, param_1.27471.0, param_2.18138.0, input_reduce_fusion.1), kind=kLoop, calls=fused_add
+  input_reduce_fusion = f32[8]{0} fusion(loop_add_fusion), kind=kInput, calls=fused_reduce
+  loop_multiply_fusion = bf16[1,8,4096]{2,1,0} fusion(loop_add_fusion, input_reduce_fusion), kind=kLoop, calls=fused_multiply
+  ROOT res.1 = (bf16[1,8,4096]{2,1,0}, bf16[1,8,4096]{2,1,0}) tuple(loop_add_fusion, loop_multiply_fusion)
+})";
+
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> triton_module,
+                          ParseAndReturnVerifiedModule(kTritonHloText));
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<HloModule> emitters_module,
+                          ParseAndReturnVerifiedModule(kEmittersHloText));
+
+  EXPECT_TRUE(RunAndCompareTwoModules(
+      std::move(triton_module), std::move(emitters_module),
+      ErrorSpec{/*aabs=*/0, /*arel=*/0}, /*run_hlo_passes=*/false));
+}
+
 // Reproducer from b/384110192.
 TEST_F(TritonEmitterTest,
        FusionWithOutputContainingMoreThanInt32MaxElementsExecutesCorrectly) {

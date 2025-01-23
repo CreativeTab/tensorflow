@@ -103,14 +103,14 @@ class SymbolicTileAnalysis {
       bool constraints_are_known_satisfied = false,
       bool compute_all_tile_offset_indexing_maps = false) const;
 
-  // Returns the tiled root instruction.
-  const SymbolicTiledHloInstruction* GetRoot() const {
-    return symbolic_tiled_hlo_instructions_.back().get();
-  }
+  // Returns the fusion root instructions.
+  const std::vector<const HloInstruction*>& GetRoots() const { return roots_; }
 
   // Returns the number of tile parameters in this symbolic analysis.
+  // TODO(b/390569102): This assumes that there is only one root that matters
+  // for computing the tiling.
   int64_t num_tile_parameters() const {
-    return GetRoot()->hlo()->shape().dimensions_size();
+    return GetRoots()[real_root_index_]->shape().dimensions_size();
   }
 
   // Returns the symbolic tiled HLO instructions in def-before-use order.
@@ -154,11 +154,14 @@ class SymbolicTileAnalysis {
   SymbolicTileAnalysis(
       std::vector<std::unique_ptr<SymbolicTiledHloInstruction>>
           symbolic_tiled_hlo_instructions,
+      std::vector<const HloInstruction*> roots, int64_t real_root_index,
       ConstraintExpression constraints,
       std::unique_ptr<EmitterSpecificConstraints> emitter_specific_constraints,
       mlir::MLIRContext* context)
       : symbolic_tiled_hlo_instructions_(
             std::move(symbolic_tiled_hlo_instructions)),
+        roots_(std::move(roots)),
+        real_root_index_(real_root_index),
         constraints_(std::move(constraints)),
         emitter_specific_constraints_(std::move(emitter_specific_constraints)),
         context_(context) {}
@@ -166,6 +169,13 @@ class SymbolicTileAnalysis {
   // The tiled HLO instructions in def-before-use order.
   std::vector<std::unique_ptr<SymbolicTiledHloInstruction>>
       symbolic_tiled_hlo_instructions_;
+
+  // `roots` contains the fusion roots in the order of their output index.
+  std::vector<const HloInstruction*> roots_;
+
+  // Currently we support at most one root without users. `real_root_index`
+  // specifies the index of this root.
+  int64_t real_root_index_;
 
   // See the documentation of GetConstraints().
   ConstraintExpression constraints_;

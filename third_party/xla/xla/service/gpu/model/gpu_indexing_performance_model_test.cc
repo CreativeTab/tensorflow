@@ -282,6 +282,114 @@ ENTRY main {
   EXPECT_NEAR(absl::ToDoubleMicroseconds(runtime_data.exec_time), 5, 1);
 }
 
+// Example from b/383162692.
+TEST_F(GpuIndexingPerformanceModelTest, EstimateBestTiling_CombinedFusion) {
+  TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(R"(
+HloModule ProducerConsumerFusionIsSupported2
+
+add {
+  p0 = f32[] parameter(0)
+  p1 = f32[] parameter(1)
+  ROOT a = f32[] add(p0, p1)
+}
+
+fusion.1 {
+  param_2.18138 = bf16[4096]{0} parameter(2)
+  convert.30745.21 = f32[4096]{0} convert(param_2.18138)
+  constant_14705_44 = f32[] constant(1)
+  broadcast.70385.1824 = f32[4096]{0} broadcast(constant_14705_44), dimensions={}
+  compare.11650.5 = pred[4096]{0} compare(convert.30745.21, broadcast.70385.1824), direction=LT
+  negate.2988.9 = f32[4096]{0} negate(convert.30745.21)
+  exponential.4390.7 = f32[4096]{0} exponential(negate.2988.9)
+  add.14340.7 = f32[4096]{0} add(exponential.4390.7, broadcast.70385.1824)
+  divide.3562.7 = f32[4096]{0} divide(broadcast.70385.1824, add.14340.7)
+  multiply.29134.7 = f32[4096]{0} multiply(divide.3562.7, divide.3562.7)
+  subtract.5407.7 = f32[4096]{0} subtract(broadcast.70385.1824, multiply.29134.7)
+  sqrt.1836.5 = f32[4096]{0} sqrt(subtract.5407.7)
+  constant_14706_120 = f32[] constant(2)
+  broadcast.70386.522 = f32[4096]{0} broadcast(constant_14706_120), dimensions={}
+  multiply.29135.5 = f32[4096]{0} multiply(exponential.4390.7, broadcast.70386.522)
+  constant_14707_120 = f32[] constant(-2)
+  broadcast.70387.522 = f32[4096]{0} broadcast(constant_14707_120), dimensions={}
+  multiply.29137.7 = f32[4096]{0} multiply(convert.30745.21, broadcast.70387.522)
+  exponential.4391.5 = f32[4096]{0} exponential(multiply.29137.7)
+  add.14341.5 = f32[4096]{0} add(multiply.29135.5, exponential.4391.5)
+  sqrt.1837.5 = f32[4096]{0} sqrt(add.14341.5)
+  multiply.29138.5 = f32[4096]{0} multiply(divide.3562.7, sqrt.1837.5)
+  select.8704.5 = f32[4096]{0} select(compare.11650.5, sqrt.1836.5, multiply.29138.5)
+  convert.30746.3 = bf16[4096]{0} convert(select.8704.5)
+  broadcast.70506.3 = bf16[1,8,4096]{2,1,0} broadcast(convert.30746.3), dimensions={2}
+  param_0.12242 = bf16[1,8,4096]{2,1,0} parameter(0)
+  multiply.29309.3 = bf16[1,8,4096]{2,1,0} multiply(broadcast.70506.3, param_0.12242)
+  convert.30909.1 = bf16[4096]{0} convert(divide.3562.7)
+  broadcast.70675.1 = bf16[8,4096]{1,0} broadcast(convert.30909.1), dimensions={1}
+  param_1.27471 = bf16[8,4096]{1,0} parameter(1)
+  multiply.32436 = bf16[8,4096]{1,0} multiply(param_1.27471, param_1.27471)
+  convert.34786 = f32[8,4096]{1,0} convert(multiply.32436)
+  constant_34984 = f32[] constant(0)
+  reduce.6749 = f32[8]{0} reduce(convert.34786, constant_34984), dimensions={1}, to_apply=add
+  constant_34983 = f32[] constant(0.000244140625)
+  broadcast.73257 = f32[8]{0} broadcast(constant_34983), dimensions={}
+  multiply.32435 = f32[8]{0} multiply(reduce.6749, broadcast.73257)
+  convert.34785 = bf16[8]{0} convert(multiply.32435)
+  constant_34982 = bf16[] constant(9.984e-07)
+  broadcast.73256 = bf16[8]{0} broadcast(constant_34982), dimensions={}
+  add.15681 = bf16[8]{0} add(convert.34785, broadcast.73256)
+  convert.34784 = f32[8]{0} convert(add.15681)
+  rsqrt.5166 = f32[8]{0} rsqrt(convert.34784)
+  convert.34783 = bf16[8]{0} convert(rsqrt.5166)
+  broadcast.73255 = bf16[8,4096]{1,0} broadcast(convert.34783), dimensions={0}
+  multiply.32434 = bf16[8,4096]{1,0} multiply(param_1.27471, broadcast.73255)
+  multiply.29318.3 = bf16[8,4096]{1,0} multiply(broadcast.70675.1, multiply.32434)
+  bitcast.135978.1 = bf16[1,8,4096]{2,1,0} bitcast(multiply.29318.3)
+  add.14443.1 = bf16[1,8,4096]{2,1,0} add(multiply.29309.3, bitcast.135978.1)
+  multiply.28509 = bf16[1,8,4096]{2,1,0} multiply(add.14443.1, add.14443.1)
+  convert.30357 = f32[1,8,4096]{2,1,0} convert(multiply.28509)
+  bitcast.124401 = f32[8,4096]{1,0} bitcast(convert.30357)
+  constant_30271 = f32[] constant(0)
+  reduce.5833 = f32[8]{0} reduce(bitcast.124401, constant_30271), dimensions={1}, to_apply=add
+  bitcast.124402 = f32[8,1]{1,0} bitcast(reduce.5833)
+  constant_30272 = f32[] constant(0.000244140625)
+  broadcast.70206 = f32[8,1]{1,0} broadcast(constant_30272), dimensions={}
+  multiply.28510 = f32[8,1]{1,0} multiply(bitcast.124402, broadcast.70206)
+  convert.30358 = bf16[8,1]{1,0} convert(multiply.28510)
+  constant_30273 = bf16[] constant(9.984e-07)
+  broadcast.70207 = bf16[8,1]{1,0} broadcast(constant_30273), dimensions={}
+  add.13229 = bf16[8,1]{1,0} add(convert.30358, broadcast.70207)
+  convert.30359 = f32[8,1]{1,0} convert(add.13229)
+  rsqrt.4624 = f32[8,1]{1,0} rsqrt(convert.30359)
+  convert.30360 = bf16[8,1]{1,0} convert(rsqrt.4624)
+  bitcast.124403 = bf16[8]{0} bitcast(convert.30360)
+  broadcast.70208 = bf16[1,8,4096]{2,1,0} broadcast(bitcast.124403), dimensions={1}
+  multiply.28511 = bf16[1,8,4096]{2,1,0} multiply(add.14443.1, broadcast.70208)
+  ROOT result = (bf16[1,8,4096]{2,1,0}, bf16[1,8,4096]{2,1,0}) tuple(add.14443.1, multiply.28511)
+}
+
+ENTRY main {
+  param_0 = bf16[1,8,4096]{2,1,0} parameter(0)
+  param_1 = bf16[8,4096]{1,0} parameter(1)
+  param_2 = bf16[4096]{0} parameter(2)
+  ROOT res = (bf16[1,8,4096]{2,1,0}, bf16[1,8,4096]{2,1,0}) fusion(param_0, param_1, param_2), kind=kCustom, calls=fusion.1
+}
+)"));
+  auto fusion_adaptor = HloFusionAdaptor::ForInstruction(
+      module->entry_computation()->root_instruction());
+
+  TF_ASSERT_OK_AND_ASSIGN(
+      auto tiling_result,
+      indexing_cost_model_.TryFindBestTilingForFusion(*fusion_adaptor));
+
+  ASSERT_TRUE(std::holds_alternative<TiledRunTimeData>(tiling_result));
+
+  auto tiled_runtime_data = std::get<TiledRunTimeData>(tiling_result);
+
+  EXPECT_THAT(tiled_runtime_data.block_level_parameters.output_tile_sizes,
+              ElementsAre(1, 1, 4096));
+  // TODO(b/390559452): The number of warps should actually be 32, as it would
+  // improve the performance significantly.
+  EXPECT_EQ(tiled_runtime_data.block_level_parameters.num_warps, 4);
+}
+
 TEST_F(GpuIndexingPerformanceModelTest,
        EstimateBestTiling_TritonSoftmax_IsSupported) {
   TF_ASSERT_OK_AND_ASSIGN(auto module, ParseAndReturnVerifiedModule(R"(
