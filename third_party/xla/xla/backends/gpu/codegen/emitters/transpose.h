@@ -39,9 +39,30 @@ limitations under the License.
 #include "xla/service/gpu/ir_emission_utils.h"
 #include "xla/service/gpu/launch_dimensions.h"
 #include "xla/shape.h"
+#include "xla/xla_data.pb.h"
 
 namespace xla {
 namespace gpu {
+
+// TODO(pifon): Unify this with TransposeDescription.
+struct TransposeSpec {
+  const Shape& input_shape() const { return transpose->operand(0)->shape(); }
+  const Shape& output_shape() const { return transpose->shape(); }
+  PrimitiveType elem_type() const { return input_shape().element_type(); }
+
+  const HloTransposeInstruction* transpose;
+
+  llvm::SmallVector<int64_t, 3> permutation;
+  llvm::SmallVector<int64_t, 3> inv_permutation;
+
+  // Canonical transpose permutates the input shape
+  // <... x T2 x ... x A x T1 x B> into <... x T1 x ... x A x T2 x B>.
+  llvm::SmallVector<int64_t, 3> canonical_output_shape;
+  llvm::SmallVector<int64_t, 3> canonical_permutation;
+  llvm::SmallVector<int64_t, 3> canonical_inv_permutation;
+  llvm::SmallVector<int64_t, 3> canonical_input_shape;
+};
+TransposeSpec GetTransposeSpec(const HloTransposeInstruction* transpose);
 
 // Lowers kTranspose fusion to LLVM via MLIR using GPU's shared memory.
 
