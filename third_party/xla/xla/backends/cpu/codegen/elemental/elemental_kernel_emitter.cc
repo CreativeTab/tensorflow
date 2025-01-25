@@ -13,13 +13,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 ==============================================================================*/
 
-#include "xla/backends/cpu/codegen/elemental_kernel_emitter.h"
+#include "xla/backends/cpu/codegen/elemental/elemental_kernel_emitter.h"
 
 #include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
-#include <string>
 #include <utility>
 #include <vector>
 
