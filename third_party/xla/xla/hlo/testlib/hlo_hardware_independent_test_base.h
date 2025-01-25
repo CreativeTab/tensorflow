@@ -25,6 +25,7 @@ limitations under the License.
 #include <utility>
 #include <vector>
 
+#include <gtest/gtest.h>
 #include "absl/base/attributes.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -170,8 +171,16 @@ class HloHardwareIndependentTestBase : public ::testing::Test {
   // changed the module or not based on expect_change flag.  Returns unique_ptr
   // to the HLO module for further inspection.
   absl::StatusOr<std::unique_ptr<HloModule>> RunAndCheckHloRewrite(
-      absl::string_view hlo_template, HloPassInterface&& hlo_pass,
+      absl::string_view hlo_template, HloPassInterface* hlo_pass,
       bool expect_change = true, FixedMapping params = {}) const;
+
+  // Rvalue overload.
+  absl::StatusOr<std::unique_ptr<HloModule>> RunAndCheckHloRewrite(
+      absl::string_view hlo_template, HloPassInterface&& hlo_pass,
+      bool expect_change = true, FixedMapping params = {}) const {
+    return RunAndCheckHloRewrite(hlo_template, &hlo_pass, expect_change,
+                                 params);
+  }
 
   // Populates debug options from command-line flags and adjusts the options for
   // testing. It is recommended to use this when you need to pass in

@@ -442,10 +442,10 @@ cc_library(
         "//xla:util",
         "//xla:xla_data_proto_cc",
         "//xla/hlo/ir:hlo",
-        "//xla/hlo/parser:hlo_parser",
         "//xla/hlo/pass:hlo_pass",
         "//xla/hlo/utils:hlo_query",
         "//xla/service:collective_ops_utils",
+        "//xla/service:source_target_pairs",
         "//xla/service/gpu:backend_configs_cc",
         "//xla/tsl/platform:errors",
         "//xla/tsl/platform:statusor",
@@ -563,15 +563,26 @@ cc_library(
 )
 
 xla_cc_test(
+    # cc_test(
     name = "collective_permute_valid_iteration_annotator_test",
     srcs = ["collective_permute_valid_iteration_annotator_test.cc"],
     deps = [
         ":collective_permute_valid_iteration_annotator",
         "//xla/hlo/ir:hlo",
+        "//xla/hlo/pass:hlo_pass",
         "//xla/hlo/pass:hlo_pass_pipeline",
+        "//xla/hlo/testlib:hlo_hardware_independent_test_base",
         "//xla/hlo/transforms:while_loop_trip_count_annotator",
         "//xla/service:collective_ops_utils",
-        "//xla/tests:hlo_test_base",
+        "//xla/tsl/lib/core:status_test_util",
+        "//xla/tsl/platform:errors",
+        "//xla/tsl/platform:statusor",
+        "@com_google_absl//absl/log",
+        "@com_google_absl//absl/log:check",
+        "@com_google_absl//absl/log:globals",
+        "@com_google_absl//absl/status",
+        "@com_google_absl//absl/status:statusor",
+        "@com_google_absl//absl/strings:string_view",
         "@com_google_googletest//:gtest_main",
     ],
 )
