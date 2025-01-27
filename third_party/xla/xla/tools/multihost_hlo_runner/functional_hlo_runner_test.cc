@@ -111,6 +111,32 @@ TEST_F(FunctionalHloRunnerTest, SingleDeviceHloWithExecutionProfile) {
   }
 }
 
+TEST_F(FunctionalHloRunnerTest, GPUProfilerReturnsNonNullXSpace) {
+  FunctionalHloRunner::RunningOptions running_options;
+  TF_ASSERT_OK_AND_ASSIGN(auto profiler, GPURunnerProfiler::Create());
+  running_options.profiler = profiler.get();
+
+  profiler->CreateSession();
+  profiler->UploadSession();
+  EXPECT_NE(profiler->GetXSpace(), nullptr);
+}
+
+TEST_F(FunctionalHloRunnerTest,
+       SingleDeviceHloWithGPUProfilerReturnsNonNullXSpace) {
+  TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<xla::PjRtClient> client,
+                          GetPjRtClient());
+  FunctionalHloRunner::RunningOptions running_options;
+  TF_ASSERT_OK_AND_ASSIGN(auto profiler, GPURunnerProfiler::Create());
+  running_options.profiler = profiler.get();
+
+  TF_EXPECT_OK(FunctionalHloRunner::LoadAndRunAndDump(
+      *client,
+      /* debug_options= */ {}, /* preproc_options= */ {},
+      /* raw_compile_options = */ {}, running_options,
+      {GetHloPath("single_device.hlo")}, InputFormat::kText));
+  EXPECT_GT(profiler->GetXSpace()->planes_size(), 0);
+}
+
 TEST_F(FunctionalHloRunnerTest, Sharded2Devices) {
   TF_ASSERT_OK_AND_ASSIGN(std::unique_ptr<xla::PjRtClient> client,
                           GetPjRtClient());

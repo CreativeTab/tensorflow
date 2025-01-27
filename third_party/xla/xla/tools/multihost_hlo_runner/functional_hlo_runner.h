@@ -42,6 +42,7 @@ limitations under the License.
 #include "xla/xla_data.pb.h"
 #include "tsl/platform/logging.h"
 #include "tsl/platform/statusor.h"
+#include "tsl/profiler/lib/profiler_session.h"
 #include "tsl/profiler/protobuf/xplane.pb.h"
 
 namespace xla {
@@ -82,6 +83,35 @@ class ProfilerInterface {
 class XSpaceProfilerInterface : public ProfilerInterface {
  public:
   virtual const tensorflow::profiler::XSpace* GetXSpace() = 0;
+};
+
+// GPURunnerProfiler is a profiler plugin that using tsl::ProfilerSession to
+// profile GPU execution. It needs to be created after PJRT client is
+// initialized.
+class GPURunnerProfiler : public XSpaceProfilerInterface {
+ public:
+  // Factory method to create a GPURunnerProfiler to get device time and wall
+  // time.
+  static absl::StatusOr<std::unique_ptr<GPURunnerProfiler>> Create();
+
+  // Default ctor.
+  explicit GPURunnerProfiler() = default;
+
+  // Start a new profiling session.
+  void CreateSession() override;
+
+  // Stop the current profiling session.
+  void UploadSession() override;
+
+  // Returns the XSpace proto.
+  const tensorflow::profiler::XSpace* GetXSpace() override;
+
+ private:
+  // The profiler session.
+  std::unique_ptr<tsl::ProfilerSession> session_;
+
+  // The XSpace proto to be returned by GetXSpace().
+  std::unique_ptr<tensorflow::profiler::XSpace> xspace_;
 };
 
 bool AbslParseFlag(absl::string_view text, InputFormat* input_format,

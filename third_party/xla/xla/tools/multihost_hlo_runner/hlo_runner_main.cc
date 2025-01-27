@@ -240,6 +240,10 @@ static absl::Status RunMultihostHloRunner(int argc, char** argv,
         env, xla::GetPjRtEnvironmentForGpu(
                  opts.address_str, gpu_options,
                  absl::Seconds(opts.gpu_client_initialization_timeout_sec)));
+    // Create a GPURunnerProfiler to profile GPU executions.
+    TF_ASSIGN_OR_RETURN(auto profiler, GPURunnerProfiler::Create());
+    running_options.profiler = profiler.get();
+
   } else if (opts.device_type_str == "host") {
     TF_ASSIGN_OR_RETURN(env, xla::GetPjRtEnvironmentForHostCpu());
   } else {
