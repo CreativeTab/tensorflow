@@ -2260,6 +2260,18 @@ class HloInstruction {
     }
   }
 
+  bool add_frontend_attribute(const std::string& key,
+                              const std::string& value) {
+    auto it =
+        mutable_rare()->frontend_attributes.mutable_map()->insert({key, value});
+    return it.second;
+  }
+
+  void set_frontend_attribute(const std::string& key,
+                              const std::string& value) {
+    (*mutable_rare()->frontend_attributes.mutable_map())[key] = value;
+  }
+
   bool has_frontend_attributes() const {
     return has_rare() && !rare()->frontend_attributes.map().empty();
   }
