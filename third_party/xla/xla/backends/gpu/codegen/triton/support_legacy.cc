@@ -90,6 +90,12 @@ bool IsTritonSupportedDotOutputType(
                                          return cc.has_bf16_dtype_support();
                                        }},
                         gpu_version);
+    case S32:
+      return std::visit(
+          VariantVisitor{
+              [](const se::CudaComputeCapability& cc) { return true; },
+              [](const se::RocmComputeCapability& cc) { return false; }},
+          gpu_version);
     default:
       return false;
   }
